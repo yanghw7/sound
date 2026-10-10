@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f5d8a">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<title>백색소음 발생기</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#eef1f5;--fg:#1d2733;--mut:#6b7886;--card:#fff;--line:#d3dae3;--acc:#2f5d8a;--accfg:#fff}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f161e;--fg:#e4eaf1;--mut:#8b98a7;--card:#18222d;--line:#2a3745;--acc:#7fb0e0;--accfg:#0f161e}}
+:root[data-theme="dark"]{--bg:#0f161e;--fg:#e4eaf1;--mut:#8b98a7;--card:#18222d;--line:#2a3745;--acc:#7fb0e0;--accfg:#0f161e}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:"Noto Sans KR",system-ui,-apple-system,"Apple SD Gothic Neo",sans-serif;display:flex;justify-content:center;min-height:100vh}
+main{width:100%;max-width:420px;padding:32px 20px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:22px;font-weight:700;margin:0}
+p.sub{margin:4px 0 0;color:var(--mut);font-size:14px}
+.play{align-self:center;width:132px;height:132px;border-radius:50%;border:0;background:var(--acc);color:var(--accfg);font:700 18px inherit;font-family:inherit;cursor:pointer}
+.play.on{animation:pulse 3s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 18px color-mix(in srgb,var(--acc) 22%,transparent)}}
+@media (prefers-reduced-motion:reduce){.play.on{animation:none}}
+:focus-visible{outline:3px solid var(--acc);outline-offset:3px}
+.group{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.group h2{font-size:14px;margin:0 0 12px;color:var(--mut);font-weight:500}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button{flex:1;min-width:64px;padding:10px 8px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;font-size:14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+.hint{font-size:12px;color:var(--mut);margin:8px 0 0}
+input[type=range]{width:100%;accent-color:var(--acc)}
+.row{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:6px;gap:8px}
+.num{width:92px;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit;font-size:14px;text-align:right}
+.cust{display:flex;align-items:center;gap:6px;margin-top:12px;font-size:14px;flex-wrap:wrap}
+.cust .num{width:64px}
+.cust button{padding:9px 14px;border-radius:10px;border:0;background:var(--acc);color:var(--accfg);font:inherit;font-size:14px;cursor:pointer}
+#left{text-align:center;color:var(--mut);font-size:14px;min-height:20px;margin-top:-12px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>백색소음 발생기</h1>
+    <p class="sub">잡음을 덮어 집중과 수면을 돕습니다.</p>
+  </header>
+
+  <section class="group">
+    <h2>종료 타이머</h2>
+    <div class="seg" id="timers"></div>
+    <div class="cust">직접 입력
+      <input class="num" type="number" id="ch" min="0" max="24" value="0" inputmode="numeric" aria-label="시간"> 시간
+      <input class="num" type="number" id="cm" min="0" max="59" value="0" inputmode="numeric" aria-label="분"> 분
+      <button id="cset">설정</button>
+    </div>
+    <p class="hint">최대 24시간(1440분)까지 설정됩니다.</p>
+  </section>
+
+  <button class="play" id="play" aria-pressed="false">재생</button>
+  <div id="left" aria-live="polite"></div>
+
+  <section class="group">
+    <h2>소리 종류</h2>
+    <div class="seg" id="types">
+      <button data-t="0" aria-pressed="true">화이트</button>
+      <button data-t="1" aria-pressed="false">핑크</button>
+      <button data-t="2" aria-pressed="false">브라운</button>
+    </div>
+    <p class="hint" id="hint"></p>
+  </section>
+
+  <section class="group">
+    <div class="row"><label for="vol">볼륨</label><span id="volv">50%</span></div>
+    <input type="range" id="vol" min="0" max="100" value="50">
+    <div class="row" style="margin-top:16px"><label for="tone">음색 (낮음 ↔ 높음)</label>
+      <span><input class="num" type="number" id="fnum" min="0" max="44000" step="1" inputmode="numeric" aria-label="음색 주파수 Hz"> Hz</span></div>
+    <input type="range" id="tone" min="0" max="1000" value="1000">
+    <p class="hint" id="fhint">0~44000 Hz 직접 입력 가능. 사람 귀는 보통 20kHz 위를 듣지 못하며, 실제 적용은 기기 출력 한계까지입니다.</p>
+  </section>
+
+</main>
+
+<script>
+const NB=window.NoiseBridge, native=!!NB;
+const $=id=>document.getElementById(id);
+const HINTS={white:"전 주파수가 고르게 섞인 소리. 날카롭고 선명합니다.",pink:"저음이 더 강한 소리. 빗소리나 바람처럼 부드럽습니다.",brown:"가장 낮고 묵직한 소리. 먼 천둥이나 폭포 같습니다."};
+const TN=["white","pink","brown"];
+const TIMERS=[[0,"끄기"],[15,"15분"],[30,"30분"],[50,"50분"],[60,"60분"],[100,"100분"],[120,"2시간"],[180,"3시간"],[240,"4시간"],[300,"5시간"]];
+let S={playing:false,type:"white",vol:50,freq:20000,timer:0,endAt:0};
+let ctx,src,gain,filt,timerId=null;
+try{if(!native){const j=JSON.parse(localStorage.getItem("wn")||"{}");if(j.type)S.type=j.type;if(j.vol!=null)S.vol=j.vol;if(j.freq!=null)S.freq=j.freq}}catch(e){}
+function save(){try{localStorage.setItem("wn",JSON.stringify({type:S.type,vol:S.vol,freq:S.freq}))}catch(e){}}
+
+/* ---------- 웹 오디오 (PWA/브라우저용) ---------- */
+function makeBuffer(kind){
+  const len=ctx.sampleRate*4,buf=ctx.createBuffer(2,len,ctx.sampleRate);
+  for(let c=0;c<2;c++){
+    const d=buf.getChannelData(c);let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0,last=0;
+    for(let i=0;i<len;i++){
+      const w=Math.random()*2-1;
+      if(kind==="white"){d[i]=w*0.5}
+      else if(kind==="pink"){
+        b0=.99886*b0+w*.0555179;b1=.99332*b1+w*.0750759;b2=.969*b2+w*.153852;
+        b3=.8665*b3+w*.3104856;b4=.55*b4+w*.5329522;b5=-.7616*b5-w*.016898;
+        d[i]=(b0+b1+b2+b3+b4+b5+b6+w*.5362)*.11;b6=w*.115926;
+      }else{last=(last+.02*w)/1.02;d[i]=last*3.5}
+    }
+  }
+  return buf;
+}
+function effF(){return Math.max(20,Math.min(S.freq,(ctx?ctx.sampleRate:48000)*0.49))}
+function startSource(){
+  if(src){try{src.stop()}catch(e){}}
+  src=ctx.createBufferSource();src.buffer=makeBuffer(S.type);src.loop=true;src.connect(filt);src.start();
+}
+function volGain(){const v=S.vol/100;return v*v}
+function setGain(v,t=0.3){gain.gain.cancelScheduledValues(ctx.currentTime);gain.gain.setTargetAtTime(v,ctx.currentTime,t/3)}
+async function wStart(){
+  if(!ctx){
+    try{ctx=new AudioContext({sampleRate:96000})}catch(e){ctx=new (window.AudioContext||window.webkitAudioContext)()}
+    gain=ctx.createGain();gain.gain.value=0;
+    filt=ctx.createBiquadFilter();filt.type="lowpass";filt.Q.value=0;filt.frequency.value=effF();
+    filt.connect(gain);gain.connect(ctx.destination);
+  }
+  if(ctx.state==="suspended")await ctx.resume();
+  startSource();setGain(volGain(),0.6);S.playing=true;wArm();
+}
+function wStop(){
+  if(!ctx)return;
+  setGain(0,0.6);const s=src;setTimeout(()=>{if(!S.playing&&s){try{s.stop()}catch(e){}}},900);
+  S.playing=false;S.endAt=0;clearTimeout(timerId);render();
+}
+function wArm(){
+  clearTimeout(timerId);
+  if(S.timer>0&&S.playing){S.endAt=Date.now()+S.timer*60000;timerId=setTimeout(wStop,S.timer*60000)}else S.endAt=0;
+}
+
+/* ---------- 명령 (네이티브 앱이면 안드로이드 서비스로 전달) ---------- */
+function send(a,x){
+  x=Math.round(+x||0);
+  if(native){NB.cmd(a,x);pull();return}
+  if(a==="PLAY")wStart().then(render);
+  else if(a==="STOP")wStop();
+  else if(a==="TYPE"){S.type=TN[x];if(S.playing)startSource();save()}
+  else if(a==="VOL"){S.vol=x;if(S.playing)setGain(volGain(),0.1);save()}
+  else if(a==="FREQ"){S.freq=x;if(filt)filt.frequency.setTargetAtTime(effF(),ctx.currentTime,0.05);save()}
+  else if(a==="TIMER"){S.timer=x;wArm()}
+  render();
+}
+function pull(){if(native){try{Object.assign(S,JSON.parse(NB.state()))}catch(e){}}render()}
+
+/* ---------- UI ---------- */
+const sl2f=v=>Math.round(20*Math.pow(2200,v/1000));            // 20Hz ~ 44000Hz (로그)
+const f2sl=f=>Math.round(Math.log(Math.max(20,f)/20)/Math.log(2200)*1000);
+function fmtT(s){const h=Math.floor(s/3600),m=Math.floor(s%3600/60),c=s%60;
+  return (h?h+":"+String(m).padStart(2,"0"):m)+":"+String(c).padStart(2,"0")}
+function render(){
+  const b=$("play");b.textContent=S.playing?"정지":"재생";
+  b.classList.toggle("on",S.playing);b.setAttribute("aria-pressed",S.playing);
+  document.querySelectorAll("#types button").forEach(x=>x.setAttribute("aria-pressed",TN[+x.dataset.t]===S.type));
+  $("hint").textContent=HINTS[S.type];
+  $("volv").textContent=S.vol+"%";
+  if(document.activeElement!==$("vol"))$("vol").value=S.vol;
+  if(document.activeElement!==$("tone"))$("tone").value=f2sl(S.freq);
+  if(document.activeElement!==$("fnum"))$("fnum").value=S.freq;
+  document.querySelectorAll("#timers button").forEach(x=>x.setAttribute("aria-pressed",+x.dataset.m===S.timer));
+  let t="";
+  if(S.playing&&S.endAt>0)t="남은 시간 "+fmtT(Math.max(0,Math.round((S.endAt-Date.now())/1000)));
+  else if(!S.playing&&S.timer>0)t="재생하면 "+S.timer+"분 뒤 종료";
+  $("left").textContent=t;
+  if(ctx)$("fhint").textContent="0~44000 Hz 직접 입력 가능. 이 기기에서 실제 적용되는 한계는 약 "+(ctx.sampleRate*0.49/1000).toFixed(1)+" kHz 입니다.";
+}
+$("timers").innerHTML=TIMERS.map(([m,l])=>`<button data-m="${m}" aria-pressed="false">${l}</button>`).join("");
+$("play").onclick=()=>send(S.playing?"STOP":"PLAY");
+document.querySelectorAll("#types button").forEach(b=>b.onclick=()=>send("TYPE",b.dataset.t));
+$("vol").oninput=()=>send("VOL",$("vol").value);
+$("tone").oninput=()=>{$("fnum").value=sl2f($("tone").value);send("FREQ",$("fnum").value)};
+$("fnum").oninput=()=>{const v=$("fnum").value;if(v==="")return;send("FREQ",Math.min(44000,Math.max(0,+v)))};
+$("fnum").onchange=()=>{$("fnum").value=S.freq};
+document.querySelectorAll("#timers button").forEach(b=>b.onclick=()=>send("TIMER",b.dataset.m));
+$("cset").onclick=()=>{
+  const m=Math.min(1440,Math.max(0,(+$("ch").value||0)*60+(+$("cm").value||0)));
+  if(m>0)send("TIMER",m);
+};
+setInterval(()=>native?pull():render(),1000);
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)pull()});
+if(!native&&"serviceWorker" in navigator&&location.protocol.startsWith("http"))navigator.serviceWorker.register("sw.js").catch(()=>{});
+pull();
+</script>
+</body>
+</html>
