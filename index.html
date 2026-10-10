@@ -45,16 +45,6 @@ input[type=range]{width:100%;accent-color:var(--acc)}
     <p class="sub">잡음을 덮어 집중과 수면을 돕습니다.</p>
   </header>
 
-  <section class="group">
-    <h2>종료 타이머</h2>
-    <div class="seg" id="timers"></div>
-    <div class="cust">직접 입력
-      <input class="num" type="number" id="ch" min="0" max="24" value="0" inputmode="numeric" aria-label="시간"> 시간
-      <input class="num" type="number" id="cm" min="0" max="59" value="0" inputmode="numeric" aria-label="분"> 분
-      <button id="cset">설정</button>
-    </div>
-    <p class="hint">최대 24시간(1440분)까지 설정됩니다.</p>
-  </section>
 
   <button class="play" id="play" aria-pressed="false">재생</button>
   <div id="left" aria-live="polite"></div>
@@ -78,6 +68,16 @@ input[type=range]{width:100%;accent-color:var(--acc)}
     <p class="hint" id="fhint">0~44000 Hz 직접 입력 가능. 사람 귀는 보통 20kHz 위를 듣지 못하며, 실제 적용은 기기 출력 한계까지입니다.</p>
   </section>
 
+  <section class="group">
+    <h2>종료 타이머</h2>
+    <div class="cust" style="margin:0 0 14px">직접 입력
+      <input class="num" type="number" id="ch" min="0" max="24" value="0" inputmode="numeric" aria-label="시간"> 시간
+      <input class="num" type="number" id="cm" min="0" max="59" value="0" inputmode="numeric" aria-label="분"> 분
+      <button id="cset">설정</button>
+    </div>
+    <p class="hint">최대 24시간(1440분)까지 설정됩니다.</p>
+    <div class="seg" id="timers"></div>
+  </section>
 </main>
 
 <script>
