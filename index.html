@@ -28,6 +28,7 @@ p.sub{margin:4px 0 0;color:var(--mut);font-size:14px}
 .seg{display:flex;gap:8px;flex-wrap:wrap}
 .seg button{flex:1;min-width:64px;padding:10px 8px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;font-size:14px;cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+#types{display:grid;grid-template-columns:repeat(3,1fr)}
 .hint{font-size:12px;color:var(--mut);margin:8px 0 0}
 input[type=range]{width:100%;accent-color:var(--acc)}
 .row{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:6px;gap:8px}
@@ -55,6 +56,9 @@ input[type=range]{width:100%;accent-color:var(--acc)}
       <button data-t="0" aria-pressed="true">화이트</button>
       <button data-t="1" aria-pressed="false">핑크</button>
       <button data-t="2" aria-pressed="false">브라운</button>
+      <button data-t="3" aria-pressed="false">그레이</button>
+      <button data-t="4" aria-pressed="false">그린</button>
+      <button data-t="5" aria-pressed="false">바이올렛</button>
     </div>
     <p class="hint" id="hint"></p>
   </section>
@@ -83,8 +87,11 @@ input[type=range]{width:100%;accent-color:var(--acc)}
 <script>
 const NB=window.NoiseBridge, native=!!NB;
 const $=id=>document.getElementById(id);
-const HINTS={white:"전 주파수가 고르게 섞인 소리. 날카롭고 선명합니다.",pink:"저음이 더 강한 소리. 빗소리나 바람처럼 부드럽습니다.",brown:"가장 낮고 묵직한 소리. 먼 천둥이나 폭포 같습니다."};
-const TN=["white","pink","brown"];
+const HINTS={white:"전 주파수가 고르게 섞인 소리. 날카롭고 선명합니다.",pink:"저음이 더 강한 소리. 빗소리나 바람처럼 부드럽습니다.",brown:"가장 낮고 묵직한 소리. 먼 천둥이나 폭포 같습니다.",
+  gray:"ISO 226(40폰) 등청감곡선의 역특성으로 만든 소리. 모든 대역이 귀에 비슷한 크기로 들립니다.",
+  green:"500Hz 부근 중음역을 강조한 소리. 숲속 바람, 나뭇잎, 시냇물 같은 자연음 느낌입니다.",
+  violet:"고음이 강하게 올라간 맑고 날카로운 소리. 브라운과 반대 성질입니다."};
+const TN=["white","pink","brown","gray","green","violet"];
 const TIMERS=[[0,"끄기"],[15,"15분"],[30,"30분"],[50,"50분"],[60,"60분"],[100,"100분"],[120,"2시간"],[180,"3시간"],[240,"4시간"],[300,"5시간"]];
 let S={playing:false,type:"white",vol:50,freq:20000,timer:0,endAt:0};
 let ctx,src,gain,filt,timerId=null;
@@ -99,6 +106,8 @@ function makeBuffer(kind){
     for(let i=0;i<len;i++){
       const w=Math.random()*2-1;
       if(kind==="white"){d[i]=w*0.5}
+      else if(kind==="gray"||kind==="green"){d[i]=w}            // 필터 체인에서 성형
+      else if(kind==="violet"){d[i]=(w-last)*.35;last=w}   // 백색잡음의 차분 (+6dB/옥타브)
       else if(kind==="pink"){
         b0=.99886*b0+w*.0555179;b1=.99332*b1+w*.0750759;b2=.969*b2+w*.153852;
         b3=.8665*b3+w*.3104856;b4=.55*b4+w*.5329522;b5=-.7616*b5-w*.016898;
@@ -109,9 +118,29 @@ function makeBuffer(kind){
   return buf;
 }
 function effF(){return Math.max(20,Math.min(S.freq,(ctx?ctx.sampleRate:48000)*0.49))}
+/* 그레이: ISO 226:2003 40폰 등청감곡선의 역특성(1kHz 기준, 저역 최대 +30dB 제한)을 로우쉘프 1 + 피킹 7개로 근사 */
+const GRAY_SHELF=[137.246,29.67];
+const GRAY_PEAKS=[[80.002,1.188,3.738],[305.422,0.476,5.349],[1711.591,0.4,-7.22],[4332.115,0.408,-14.629],[8546.73,0.4,23.491],[15653.087,3.037,1.75],[1540.636,1.061,10.227]];
+let chainOut=null;
+function mkBiquad(type,f,q,g){const n=ctx.createBiquadFilter();n.type=type;n.frequency.value=Math.min(f,ctx.sampleRate*0.45);n.Q.value=q;n.gain.value=g;return n}
+function buildChain(kind,input){
+  if(kind==="gray"){
+    let p=input;const nodes=[mkBiquad("lowshelf",GRAY_SHELF[0],1,GRAY_SHELF[1])].concat(GRAY_PEAKS.map(a=>mkBiquad("peaking",a[0],a[1],a[2])));
+    nodes.forEach(n=>{p.connect(n);p=n});
+    const o=ctx.createGain();o.gain.value=0.12;p.connect(o);return o;
+  }
+  if(kind==="green"){
+    const bp=mkBiquad("bandpass",500,0.7,0),fl=ctx.createGain(),o=ctx.createGain();
+    fl.gain.value=0.15;o.gain.value=0.289/Math.sqrt(0.0194*48000/ctx.sampleRate+0.0075);
+    input.connect(bp);input.connect(fl);bp.connect(o);fl.connect(o);return o;
+  }
+  return input;
+}
 function startSource(){
   if(src){try{src.stop()}catch(e){}}
-  src=ctx.createBufferSource();src.buffer=makeBuffer(S.type);src.loop=true;src.connect(filt);src.start();
+  if(chainOut){try{chainOut.disconnect()}catch(e){}}
+  src=ctx.createBufferSource();src.buffer=makeBuffer(S.type);src.loop=true;
+  chainOut=buildChain(S.type,src);chainOut.connect(filt);src.start();
 }
 function volGain(){const v=S.vol/100;return v*v}
 function setGain(v,t=0.3){gain.gain.cancelScheduledValues(ctx.currentTime);gain.gain.setTargetAtTime(v,ctx.currentTime,t/3)}
