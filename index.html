@@ -28,7 +28,9 @@ p.sub{margin:4px 0 0;color:var(--mut);font-size:14px}
 .seg{display:flex;gap:8px;flex-wrap:wrap}
 .seg button{flex:1;min-width:64px;padding:10px 8px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--fg);font:inherit;font-size:14px;cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
-#types{display:grid;grid-template-columns:repeat(3,1fr)}
+#types{display:grid;grid-template-columns:repeat(4,1fr)}
+#types button{min-width:0;padding:10px 2px;font-size:13px}
+[hidden]{display:none!important}
 .hint{font-size:12px;color:var(--mut);margin:8px 0 0}
 input[type=range]{width:100%;accent-color:var(--acc)}
 .row{display:flex;justify-content:space-between;align-items:center;font-size:14px;margin-bottom:6px;gap:8px}
@@ -59,8 +61,19 @@ input[type=range]{width:100%;accent-color:var(--acc)}
       <button data-t="3" aria-pressed="false">그레이</button>
       <button data-t="4" aria-pressed="false">그린</button>
       <button data-t="5" aria-pressed="false">바이올렛</button>
+      <button data-t="6" aria-pressed="false">바람</button>
+      <button data-t="7" aria-pressed="false">파도</button>
+      <button data-t="8" aria-pressed="false">비</button>
+      <button data-t="9" aria-pressed="false">시냇물</button>
+      <button data-t="10" aria-pressed="false">폭포</button>
+      <button data-t="11" aria-pressed="false">모닥불</button>
     </div>
     <p class="hint" id="hint"></p>
+    <div id="lvbox" hidden>
+      <div class="row" style="margin-top:14px"><label for="lv">효과 강도</label><span><input class="num" type="number" id="lvnum" min="0" max="100" step="1" inputmode="numeric" aria-label="효과 강도 퍼센트"> %</span></div>
+      <input type="range" id="lv" min="0" max="100" value="50">
+      <p class="hint" id="lvhint"></p>
+    </div>
   </section>
 
   <section class="group">
@@ -90,16 +103,125 @@ const $=id=>document.getElementById(id);
 const HINTS={white:"전 주파수가 고르게 섞인 소리. 날카롭고 선명합니다.",pink:"저음이 더 강한 소리. 빗소리나 바람처럼 부드럽습니다.",brown:"가장 낮고 묵직한 소리. 먼 천둥이나 폭포 같습니다.",
   gray:"ISO 226(40폰) 등청감곡선의 역특성으로 만든 소리. 모든 대역이 귀에 비슷한 크기로 들립니다.",
   green:"500Hz 부근 중음역을 강조한 소리. 숲속 바람, 나뭇잎, 시냇물 같은 자연음 느낌입니다.",
-  violet:"고음이 강하게 올라간 맑고 날카로운 소리. 브라운과 반대 성질입니다."};
-const TN=["white","pink","brown","gray","green","violet"];
+  violet:"고음이 강하게 올라간 맑고 날카로운 소리. 브라운과 반대 성질입니다.",
+  wind:"돌풍이 불었다 잦아드는 바람 소리. 코드로 합성한 소리입니다.",
+  waves:"약 10초 주기로 밀려왔다 빠지는 파도 소리. 마루에서 물거품이 일어납니다.",
+  rain:"고음의 빗소리 위에 빗방울이 무작위로 떨어집니다.",
+  stream:"연속적인 물살과 잔물결이 겹쳐 흐르는 시냇물 소리. 효과 강도 하나로 조절합니다.",
+  waterfall:"넓은 대역의 물소리에 낮은 울림이 깔린 폭포 소리.",
+  fire:"낮은 불 울림 위에 타닥거리는 불꽃 소리가 섞입니다."};
+const LVHINTS={wind:"높을수록 돌풍이 세고 높은 소리가 섞입니다.",waves:"높을수록 파도가 크고 자주 칩니다.",rain:"높을수록 빗방울이 많아집니다 (약한 비 → 폭우).",stream:"높을수록 물살의 결이 풍부해지고 잔물결의 선명도가 높아집니다.",waterfall:"높을수록 물보라 고음이 많고 소리가 커집니다.",fire:"높을수록 타닥거림이 잦아집니다."};
+const TN=["white","pink","brown","gray","green","violet","wind","waves","rain","stream","waterfall","fire"];
+const NAT=["wind","waves","rain","stream","waterfall","fire"];
 const TIMERS=[[0,"끄기"],[15,"15분"],[30,"30분"],[50,"50분"],[60,"60분"],[100,"100분"],[120,"2시간"],[180,"3시간"],[240,"4시간"],[300,"5시간"]];
-let S={playing:false,type:"white",vol:50,freq:20000,timer:0,endAt:0};
-let ctx,src,gain,filt,timerId=null;
-try{if(!native){const j=JSON.parse(localStorage.getItem("wn")||"{}");if(j.type)S.type=j.type;if(j.vol!=null)S.vol=j.vol;if(j.freq!=null)S.freq=j.freq}}catch(e){}
-function save(){try{localStorage.setItem("wn",JSON.stringify({type:S.type,vol:S.vol,freq:S.freq}))}catch(e){}}
+let S={playing:false,type:"white",vol:50,lv:50,freq:20000,timer:0,endAt:0};
+let ctx,src,gain,filt,timerId=null,lvT=null;
+try{if(!native){const j=JSON.parse(localStorage.getItem("wn")||"{}");if(j.type)S.type=j.type;if(j.vol!=null)S.vol=j.vol;if(j.lv!=null)S.lv=j.lv;if(j.freq!=null)S.freq=j.freq}}catch(e){}
+function save(){try{localStorage.setItem("wn",JSON.stringify({type:S.type,vol:S.vol,lv:S.lv,freq:S.freq}))}catch(e){}}
+
+/*NAT_START*/
+/* ---------- 자연음 합성 엔진 (바람·파도·비·시냇물·폭포·모닥불) ----------
+   노이즈 + 필터 + 느리게 변하는 난수 + 필요한 자연 이벤트로 구성.
+   시냇물은 개별 물방울 톤 없이 연속 잡음 대역과 느린 물살 변화로 생성합니다.
+   안드로이드 앱의 Nature.kt 와 같은 알고리즘입니다. */
+class NLp{constructor(sr){this.sr=sr;this.a=0.1;this.y=0}
+  set(fc){this.a=1-Math.exp(-2*Math.PI*fc/this.sr)}
+  p(x){this.y+=this.a*(x-this.y);return this.y}
+  clear(){this.y=0}}
+class NWan{constructor(per,sr){this.per=per;this.sr=sr;this.cnt=0;this.tg=Math.random();this.cur=this.tg;this.c=1-Math.exp(-1/(per*sr*0.5))}
+  next(){if(--this.cnt<=0){this.tg=Math.random();this.cnt=Math.max(1,(this.per*this.sr*(0.5+Math.random()))|0)}
+    this.cur+=(this.tg-this.cur)*this.c;return this.cur}}
+class NSvf{constructor(sr){this.sr=sr;this.g=0;this.k=1;this.a1=0;this.a2=0;this.a3=0;this.i1=0;this.i2=0}
+  set(fc,q){const f=Math.min(fc,this.sr*0.45);this.g=Math.tan(Math.PI*f/this.sr);this.k=1/q;
+    this.a1=1/(1+this.g*(this.g+this.k));this.a2=this.g*this.a1;this.a3=this.g*this.a2}
+  bp(x){const v3=x-this.i2,v1=this.a1*this.i1+this.a2*v3,v2=this.i2+this.a2*this.i1+this.a3*v3;
+    this.i1=2*v1-this.i1;this.i2=2*v2-this.i2;return v1*this.k}}
+const PK_K=6.0;
+class NPink{   // 샘플레이트와 무관한 핑크 노이즈: 1차 저역통과 9개(옥타브의 약 1.1배 간격)를 1/√fc 가중치로 합침
+  constructor(sr){this.l=[];this.al=[];let f=20;for(let i=0;i<9;i++){const p=new NLp(sr);p.set(f);this.l.push(p);this.al.push(PK_K/Math.sqrt(f));f*=2.2}}
+  next(w){let o=0;for(let i=0;i<9;i++)o+=this.l[i].p(w)*this.al[i];return o}}
+const NGN=[0,0,0,0,0,0,3.4,1.2,1.15,0.9,0.6,0.9];   // 종류별 음량 보정(6 바람 … 11 모닥불)
+class Nat{
+  constructor(sr){
+    this.sr=sr;this.ws=Math.sqrt(sr/48000);this.cc=0;this.pink=new NPink(sr);
+    this.wn1=new NWan(3,sr);this.wn2=new NWan(9,sr);this.wsv=new NSvf(sr);
+    this.wp=Math.random();this.wper=10;this.wlp=new NLp(sr);this.wfo=new NLp(sr);this.wfo.set(3000);this.wfo2=new NLp(sr);this.wfo2.set(5000);
+    this.rb1=new NLp(sr);this.rb1.set(1500);this.rb2=new NLp(sr);this.rb2.set(9000);this.rsv=new NSvf(sr);
+    this.rEnv=0;this.rFc=3000;this.rDec=Math.exp(-1/(0.005*sr));
+    // 시냇물 전용: 저역 물살 + 중역 잔물결 + 아주 약한 공기감. 개별 물방울/톤 이벤트 없음.
+    this.streamLow=new NLp(sr);this.streamLow.set(280);
+    this.streamMid=new NLp(sr);this.streamMid.set(2100);
+    this.streamHigh=new NLp(sr);this.streamHigh.set(7200);
+    this.streamSlow=new NWan(2.7,sr);this.streamFast=new NWan(0.19,sr);
+    this.flp=new NLp(sr);this.fr1=new NLp(sr);this.fr1.set(140);this.fr2=new NLp(sr);this.fr2.set(140);
+    this.fw1=new NWan(1.5,sr);this.fw2=new NWan(0.4,sr);
+    this.gr1=new NLp(sr);this.gr1.set(200);this.gr2=new NLp(sr);this.gr2.set(200);this.gw=new NWan(1.2,sr);
+    this.ghs=new NLp(sr);this.ghs.set(4000);this.gsv=new NSvf(sr);this.gEnv=0;this.gDec=0.99;this.gFc=2000;
+  }
+  next(kind,s){
+    const sr=this.sr,ws=this.ws,w=(Math.random()*2-1)*ws,tick=(this.cc++&31)===0;let y=0;
+    if(kind===6){          // 바람: 핑크 노이즈를 대역통과, 돌풍에 따라 중심 주파수와 세기가 느리게 변함
+      const m=this.wn1.next()*0.7+this.wn2.next()*0.3;
+      const amp=(0.12+m*m*1.2)*(0.55+0.45*s);
+      if(tick)this.wsv.set(250+(450+1500*s)*m,1.3);
+      y=this.wsv.bp(this.pink.next(w))*amp;
+    }else if(kind===7){    // 파도: 약 7~16초 주기로 밀려왔다 빠지며, 마루에서 고음(물거품)이 열림
+      this.wp+=1/(this.wper*sr);
+      if(this.wp>=1){this.wp-=1;this.wper=(7+6*Math.random())*(1.25-0.5*s)}
+      const q=this.wp<0.35?this.wp/0.35*0.5:0.5+(this.wp-0.35)/0.65*0.5;
+      const sn=Math.sin(Math.PI*q),e=sn*sn,depth=0.55+0.45*s,env=(1-depth)*0.35+depth*e;
+      if(tick)this.wlp.set(400+2600*e);
+      const body=this.wlp.p(this.pink.next(w)),foam=this.wfo2.p(w-this.wfo.p(w))*e*e*e*0.45*depth;
+      y=body*env+foam;
+    }else if(kind===8){    // 비: 고음 빗소리 바탕 + 무작위 빗방울
+      if(Math.random()<(25+450*s*s)/sr){this.rEnv=0.3+0.7*Math.random();this.rFc=1500+5500*Math.random()}
+      if(tick)this.rsv.set(this.rFc,3);
+      const bed=this.rb2.p(w-this.rb1.p(w));
+      y=bed*(0.10+0.35*s)+this.rsv.bp(w)*this.rEnv*0.8;this.rEnv*=this.rDec;
+    }else if(kind===9){    // 시냇물: 끊기지 않는 물살 잡음, 잔물결 대역, 미세한 공기감. 개별 물방울 합성 제거.
+      const low=this.streamLow.p(w);
+      const mid=this.streamMid.p(w)-low;
+      const high=w-this.streamHigh.p(w);
+      const slow=this.streamSlow.next();
+      const ripple=this.streamFast.next();
+      // 단일 효과 강도(s)는 물살의 밀도/밝기만 변화. 전체 볼륨은 공통 볼륨 슬라이더가 담당.
+      const body=low*1.65+mid*(0.55+0.75*s)+high*(0.018+0.045*s);
+      const swell=0.78+0.34*slow;
+      const fine=0.90+0.20*ripple;
+      y=body*swell*fine*0.78;
+    }else if(kind===10){   // 폭포: 넓은 대역의 물소리 + 낮은 울림, 세기가 조금씩 출렁임
+      const am=0.85+0.15*this.fw1.next()+0.1*(this.fw2.next()-0.5);
+      if(tick)this.flp.set(2500+6000*s);
+      const base=this.flp.p(0.6*w+0.4*this.pink.next(w)),rum=this.fr2.p(this.fr1.p(w));
+      y=(base*(0.5+0.5*s)+rum*(2.5+2*s))*am;
+    }else if(kind===11){   // 모닥불: 낮은 불 울림 + 약한 쉬익 소리 + 무작위 타닥거림
+      const am=0.3+0.7*this.gw.next(),rum=this.gr2.p(this.gr1.p(w)),hiss=(w-this.ghs.p(w))*0.02;
+      if(Math.random()<(4+30*s)/sr){
+        let e=Math.random();e=e*e*0.9+0.1;let tau=0.0015+0.004*Math.random();
+        if(Math.random()<0.1){e*=1.6;tau*=2.5}
+        if(e>this.gEnv)this.gEnv=e;this.gDec=Math.exp(-1/(tau*sr));this.gFc=700+4800*Math.random()}
+      if(tick)this.gsv.set(this.gFc,1.5);
+      y=rum*am*4.5*(0.6+0.4*s)+hiss+this.gsv.bp(w)*this.gEnv*0.9;this.gEnv*=this.gDec;
+    }
+    return y*NGN[kind];
+  }
+}
+/*NAT_END*/
+function renderNature(kind,s){   // 16초 + 이음새 1.5초를 합성해 반복 재생용 버퍼로 만듦
+  const sr=ctx.sampleRate,len=Math.round(sr*16),xf=Math.round(sr*1.5),buf=ctx.createBuffer(2,len,sr);
+  for(let c=0;c<2;c++){
+    const n=new Nat(sr),t=new Float32Array(len+xf);
+    for(let i=0;i<t.length;i++)t[i]=n.next(kind,s);
+    const d=buf.getChannelData(c);
+    for(let i=0;i<len;i++)d[i]=t[i];
+    for(let i=0;i<xf;i++){const a=i/xf*Math.PI/2;d[i]=t[i]*Math.sin(a)+t[len+i]*Math.cos(a)}
+  }
+  return buf;
+}
 
 /* ---------- 웹 오디오 (PWA/브라우저용) ---------- */
 function makeBuffer(kind){
+  const ni=NAT.indexOf(kind);if(ni>=0)return renderNature(6+ni,S.lv/100);
   const len=ctx.sampleRate*4,buf=ctx.createBuffer(2,len,ctx.sampleRate);
   for(let c=0;c<2;c++){
     const d=buf.getChannelData(c);let b0=0,b1=0,b2=0,b3=0,b4=0,b5=0,b6=0,last=0;
@@ -172,6 +294,7 @@ function send(a,x){
   else if(a==="STOP")wStop();
   else if(a==="TYPE"){S.type=TN[x];if(S.playing)startSource();save()}
   else if(a==="VOL"){S.vol=x;if(S.playing)setGain(volGain(),0.1);save()}
+  else if(a==="LEVEL"){S.lv=x;save();clearTimeout(lvT);if(S.playing&&NAT.includes(S.type))lvT=setTimeout(startSource,350)}
   else if(a==="FREQ"){S.freq=x;if(filt)filt.frequency.setTargetAtTime(effF(),ctx.currentTime,0.05);save()}
   else if(a==="TIMER"){S.timer=x;wArm()}
   render();
@@ -188,6 +311,9 @@ function render(){
   b.classList.toggle("on",S.playing);b.setAttribute("aria-pressed",S.playing);
   document.querySelectorAll("#types button").forEach(x=>x.setAttribute("aria-pressed",TN[+x.dataset.t]===S.type));
   $("hint").textContent=HINTS[S.type];
+  const nat=NAT.includes(S.type);$("lvbox").hidden=!nat;if(nat)$("lvhint").textContent=LVHINTS[S.type];
+  if(document.activeElement!==$("lvnum"))$("lvnum").value=S.lv;
+  if(document.activeElement!==$("lv"))$("lv").value=S.lv;
   if(document.activeElement!==$("vnum"))$("vnum").value=S.vol;
   if(document.activeElement!==$("vol"))$("vol").value=S.vol;
   if(document.activeElement!==$("tone"))$("tone").value=f2sl(S.freq);
@@ -205,6 +331,9 @@ document.querySelectorAll("#types button").forEach(b=>b.onclick=()=>send("TYPE",
 $("vol").oninput=()=>send("VOL",$("vol").value);
 $("vnum").oninput=()=>{const v=$("vnum").value;if(v==="")return;send("VOL",Math.min(100,Math.max(0,+v)))};
 $("vnum").onchange=()=>{$("vnum").value=S.vol};
+$("lv").oninput=()=>send("LEVEL",$("lv").value);
+$("lvnum").oninput=()=>{const v=$("lvnum").value;if(v===""||isNaN(+v))return;send("LEVEL",Math.min(100,Math.max(0,+v)))};
+$("lvnum").onchange=()=>{$("lvnum").value=S.lv};
 $("tone").oninput=()=>{$("fnum").value=sl2f($("tone").value);send("FREQ",$("fnum").value)};
 $("fnum").oninput=()=>{const v=$("fnum").value;if(v==="")return;send("FREQ",Math.min(44000,Math.max(0,+v)))};
 $("fnum").onchange=()=>{$("fnum").value=S.freq};
